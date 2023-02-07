@@ -126,6 +126,14 @@ int ff_AMediaCodec_getConfigureFlagEncode(FFAMediaCodec *codec);
 
 int ff_AMediaCodec_cleanOutputBuffers(FFAMediaCodec *codec);
 
+// For encoder with FFANativeWindow as input.
+int (*signalEndOfInputStream)(FFAMediaCodec *);
+
+static inline int ff_AMediaCodec_signalEndOfInputStream(FFAMediaCodec *codec)
+{
+    return codec->signalEndOfInputStream(codec);
+}
+
 int ff_Build_SDK_INT(AVCodecContext *avctx);
 
 #endif /* AVCODEC_MEDIACODEC_WRAPPER_H */

@@ -206,6 +206,9 @@ struct JNIAMediaCodecFields {
     jmethodID release_output_buffer_id;
     jmethodID release_output_buffer_at_time_id;
 
+    jmethodID set_input_surface_id;
+    jmethodID signal_end_of_input_stream_id;
+
     jclass mediainfo_class;
 
     jmethodID init_id;
@@ -255,6 +258,9 @@ static const struct FFJniField jni_amediacodec_mapping[] = {
         { "android/media/MediaCodec", "releaseOutputBuffer", "(IZ)V", FF_JNI_METHOD, offsetof(struct JNIAMediaCodecFields, release_output_buffer_id), 1 },
         { "android/media/MediaCodec", "releaseOutputBuffer", "(IJ)V", FF_JNI_METHOD, offsetof(struct JNIAMediaCodecFields, release_output_buffer_at_time_id), 0 },
 
+        { "android/media/MediaCodec", "setInputSurface", "(Landroid/view/Surface;)V", FF_JNI_METHOD, offsetof(struct JNIAMediaCodecFields, set_input_surface_id), 0 },
+        { "android/media/MediaCodec", "signalEndOfInputStream", "()V", FF_JNI_METHOD, offsetof(struct JNIAMediaCodecFields, signal_end_of_input_stream_id), 0 },
+        
     { "android/media/MediaCodec$BufferInfo", NULL, NULL, FF_JNI_CLASS, offsetof(struct JNIAMediaCodecFields, mediainfo_class), 1 },
 
         { "android/media/MediaCodec.BufferInfo", "<init>", "()V", FF_JNI_METHOD, offsetof(struct JNIAMediaCodecFields, init_id), 1 },
@@ -270,6 +276,7 @@ static const AVClass amediacodec_class = {
     .class_name = "amediacodec",
     .item_name  = av_default_item_name,
     .version    = LIBAVUTIL_VERSION_INT,
+    .signalEndOfInputStream = mediacodec_jni_signalEndOfInputStream,
 };
 
 struct FFAMediaCodec {
@@ -1365,7 +1372,27 @@ int ff_AMediaCodec_configure(FFAMediaCodec* codec, const FFAMediaFormat* format,
 
     JNI_GET_ENV_OR_RETURN(env, codec, AVERROR_EXTERNAL);
 
-    (*env)->CallVoidMethod(env, codec->object, codec->jfields.configure_id, format->object, surface, NULL, flags);
+    if (flags & codec->CONFIGURE_FLAG_ENCODE) {
+        if (surface && !codec->jfields.set_input_surface_id) {
+            av_log(ctx, AV_LOG_ERROR, "System doesn't support setInputSurface\n");
+            return AVERROR_EXTERNAL;
+        }
+
+        (*env)->CallVoidMethod(env, codec->object, codec->jfields.configure_id, format->object, NULL, NULL, flags);
+        if (ff_jni_exception_check(env, 1, codec) < 0)
+            return AVERROR_EXTERNAL;
+
+        if (!surface)
+            return 0;
+
+        (*env)->CallVoidMethod(env, codec->object, codec->jfields.set_input_surface_id, surface);
+        if (ff_jni_exception_check(env, 1, codec) < 0)
+            return AVERROR_EXTERNAL;
+        return 0;
+    } else {
+        (*env)->CallVoidMethod(env, codec->object, codec->jfields.configure_id, format->object, surface, NULL, flags);
+    }
+
     if (ff_jni_exception_check(env, 1, codec) < 0) {
         ret = AVERROR_EXTERNAL;
         goto fail;
@@ -1704,6 +1731,21 @@ int ff_AMediaCodec_cleanOutputBuffers(FFAMediaCodec *codec)
 
 fail:
     return ret;
+}
+
+static int mediacodec_jni_signalEndOfInputStream(FFAMediaCodec *ctx)
+{
+    JNIEnv *env = NULL;
+    FFAMediaCodecJni *codec = (FFAMediaCodecJni *)ctx;
+
+    JNI_GET_ENV_OR_RETURN(env, codec, AVERROR_EXTERNAL);
+
+    (*env)->CallVoidMethod(env, codec->object, codec->jfields.signal_end_of_input_stream_id);
+    if (ff_jni_exception_check(env, 1, codec) < 0) {
+        return AVERROR_EXTERNAL;
+    }
+
+    return 0;
 }
 
 int ff_Build_SDK_INT(AVCodecContext *avctx)
