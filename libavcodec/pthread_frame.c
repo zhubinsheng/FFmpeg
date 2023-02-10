@@ -29,6 +29,7 @@
 
 #include "avcodec.h"
 #include "codec_internal.h"
+#include "decode.h"
 #include "hwconfig.h"
 #include "internal.h"
 #include "pthread_internal.h"
@@ -178,6 +179,17 @@ static void async_unlock(FrameThreadContext *fctx)
     pthread_mutex_unlock(&fctx->async_mutex);
 }
 
+static void thread_set_name(PerThreadContext *p)
+{
+    AVCodecContext *avctx = p->avctx;
+    int idx = p - p->parent->threads;
+    char name[16];
+
+    snprintf(name, sizeof(name), "av:%.7s:df%d", avctx->codec->name, idx);
+
+    ff_thread_setname(name);
+}
+
 /**
  * Codec worker thread.
  *
@@ -190,6 +202,8 @@ static attribute_align_arg void *frame_worker_thread(void *arg)
     PerThreadContext *p = arg;
     AVCodecContext *avctx = p->avctx;
     const FFCodec *codec = ffcodec(avctx->codec);
+
+    thread_set_name(p);
 
     pthread_mutex_lock(&p->mutex);
     while (1) {
@@ -630,7 +644,7 @@ void ff_thread_report_progress(ThreadFrame *f, int n, int field)
     pthread_mutex_unlock(&p->progress_mutex);
 }
 
-void ff_thread_await_progress(ThreadFrame *f, int n, int field)
+void ff_thread_await_progress(const ThreadFrame *f, int n, int field)
 {
     PerThreadContext *p;
     atomic_int *progress = f->progress ? (atomic_int*)f->progress->data : NULL;
@@ -993,7 +1007,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     pthread_mutex_lock(&p->parent->buffer_mutex);
 #if !FF_API_THREAD_SAFE_CALLBACKS
-    err = ff_get_buffer(avctx, f->f, flags);
+    err = ff_get_buffer(avctx, f, flags);
 #else
 FF_DISABLE_DEPRECATION_WARNINGS
     if (THREAD_SAFE_CALLBACKS(avctx)) {
@@ -1114,7 +1128,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         av_log(avctx, AV_LOG_DEBUG, "thread_release_buffer called on pic %p\n", f);
 
 #if !FF_API_THREAD_SAFE_CALLBACKS
-    av_frame_unref(f->f);
+    av_frame_unref(f);
 #else
     // when the frame buffers are not allocated, just reset it to clean state
     if (can_direct_free || !f->buf[0]) {

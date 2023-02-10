@@ -22,10 +22,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 #include "codec_internal.h"
-#include "get_bits.h"
-#include "internal.h"
+#include "decode.h"
 
 
 #define FRAME_HEADER_SIZE 64
@@ -224,7 +224,7 @@ static av_cold int cpia_decode_end(AVCodecContext *avctx)
 
 const FFCodec ff_cpia_decoder = {
     .p.name         = "cpia",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("CPiA video format"),
+    CODEC_LONG_NAME("CPiA video format"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_CPIA,
     .priv_data_size = sizeof(CpiaContext),
@@ -232,5 +232,4 @@ const FFCodec ff_cpia_decoder = {
     .close          = cpia_decode_end,
     FF_CODEC_DECODE_CB(cpia_decode_frame),
     .p.capabilities = AV_CODEC_CAP_DR1,
-    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE,
 };

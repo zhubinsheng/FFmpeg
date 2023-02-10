@@ -34,7 +34,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "codec_internal.h"
-#include "internal.h"
+#include "decode.h"
 #include "apng.h"
 #include "png.h"
 #include "pngdsp.h"
@@ -496,20 +496,20 @@ fail:
     return ret;
 }
 
-static uint8_t *iso88591_to_utf8(const uint8_t *in, size_t size_in)
+static char *iso88591_to_utf8(const char *in, size_t size_in)
 {
     size_t extra = 0, i;
-    uint8_t *out, *q;
+    char *out, *q;
 
     for (i = 0; i < size_in; i++)
-        extra += in[i] >= 0x80;
+        extra += !!(in[i] & 0x80);
     if (size_in == SIZE_MAX || extra > SIZE_MAX - size_in - 1)
         return NULL;
     q = out = av_malloc(size_in + extra + 1);
     if (!out)
         return NULL;
     for (i = 0; i < size_in; i++) {
-        if (in[i] >= 0x80) {
+        if (in[i] & 0x80) {
             *(q++) = 0xC0 | (in[i] >> 6);
             *(q++) = 0x80 | (in[i] & 0x3F);
         } else {
@@ -525,9 +525,10 @@ static int decode_text_chunk(PNGDecContext *s, GetByteContext *gb, int compresse
     int ret, method;
     const uint8_t *data        = gb->buffer;
     const uint8_t *data_end    = gb->buffer_end;
-    const uint8_t *keyword     = data;
-    const uint8_t *keyword_end = memchr(keyword, 0, data_end - keyword);
-    uint8_t *kw_utf8 = NULL, *text, *txt_utf8 = NULL;
+    const char *keyword     = data;
+    const char *keyword_end = memchr(keyword, 0, data_end - data);
+    char *kw_utf8 = NULL, *txt_utf8 = NULL;
+    const char *text;
     unsigned text_len;
     AVBPrint bp;
 
@@ -543,21 +544,20 @@ static int decode_text_chunk(PNGDecContext *s, GetByteContext *gb, int compresse
             return AVERROR_INVALIDDATA;
         if ((ret = decode_zbuf(&bp, data, data_end, s->avctx)) < 0)
             return ret;
+        text     = bp.str;
         text_len = bp.len;
-        ret = av_bprint_finalize(&bp, (char **)&text);
-        if (ret < 0)
-            return ret;
     } else {
-        text = (uint8_t *)data;
-        text_len = data_end - text;
+        text     = data;
+        text_len = data_end - data;
     }
 
-    kw_utf8  = iso88591_to_utf8(keyword, keyword_end - keyword);
     txt_utf8 = iso88591_to_utf8(text, text_len);
-    if (text != data)
-        av_free(text);
-    if (!(kw_utf8 && txt_utf8)) {
-        av_free(kw_utf8);
+    if (compressed)
+        av_bprint_finalize(&bp, NULL);
+    if (!txt_utf8)
+        return AVERROR(ENOMEM);
+    kw_utf8  = iso88591_to_utf8(keyword, keyword_end - keyword);
+    if (!kw_utf8) {
         av_free(txt_utf8);
         return AVERROR(ENOMEM);
     }
@@ -1387,7 +1387,7 @@ exit_loop:
     if (s->has_trns && s->color_type != PNG_COLOR_TYPE_PALETTE) {
         size_t byte_depth = s->bit_depth > 8 ? 2 : 1;
         size_t raw_bpp = s->bpp - byte_depth;
-        unsigned x, y;
+        ptrdiff_t x, y;
 
         av_assert0(s->bit_depth > 1);
 
@@ -1715,33 +1715,35 @@ static av_cold int png_dec_end(AVCodecContext *avctx)
 #if CONFIG_APNG_DECODER
 const FFCodec ff_apng_decoder = {
     .p.name         = "apng",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("APNG (Animated Portable Network Graphics) image"),
+    CODEC_LONG_NAME("APNG (Animated Portable Network Graphics) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_APNG,
     .priv_data_size = sizeof(PNGDecContext),
     .init           = png_dec_init,
     .close          = png_dec_end,
     FF_CODEC_DECODE_CB(decode_frame_apng),
-    .update_thread_context = ONLY_IF_THREADS_ENABLED(update_thread_context),
-    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS /*| AV_CODEC_CAP_DRAW_HORIZ_BAND*/,
-    .caps_internal  = FF_CODEC_CAP_INIT_THREADSAFE | FF_CODEC_CAP_INIT_CLEANUP |
-                      FF_CODEC_CAP_ALLOCATE_PROGRESS,
+    UPDATE_THREAD_CONTEXT(update_thread_context),
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
+    .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP |
+                      FF_CODEC_CAP_ALLOCATE_PROGRESS |
+                      FF_CODEC_CAP_ICC_PROFILES,
 };
 #endif
 
 #if CONFIG_PNG_DECODER
 const FFCodec ff_png_decoder = {
     .p.name         = "png",
-    .p.long_name    = NULL_IF_CONFIG_SMALL("PNG (Portable Network Graphics) image"),
+    CODEC_LONG_NAME("PNG (Portable Network Graphics) image"),
     .p.type         = AVMEDIA_TYPE_VIDEO,
     .p.id           = AV_CODEC_ID_PNG,
     .priv_data_size = sizeof(PNGDecContext),
     .init           = png_dec_init,
     .close          = png_dec_end,
     FF_CODEC_DECODE_CB(decode_frame_png),
-    .update_thread_context = ONLY_IF_THREADS_ENABLED(update_thread_context),
-    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS /*| AV_CODEC_CAP_DRAW_HORIZ_BAND*/,
-    .caps_internal  = FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM | FF_CODEC_CAP_INIT_THREADSAFE |
-                      FF_CODEC_CAP_ALLOCATE_PROGRESS | FF_CODEC_CAP_INIT_CLEANUP,
+    UPDATE_THREAD_CONTEXT(update_thread_context),
+    .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS,
+    .caps_internal  = FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM |
+                      FF_CODEC_CAP_ALLOCATE_PROGRESS | FF_CODEC_CAP_INIT_CLEANUP |
+                      FF_CODEC_CAP_ICC_PROFILES,
 };
 #endif
