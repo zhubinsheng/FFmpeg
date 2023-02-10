@@ -126,7 +126,7 @@ int ff_AMediaCodec_getConfigureFlagEncode(FFAMediaCodec *codec);
 
 int ff_AMediaCodec_cleanOutputBuffers(FFAMediaCodec *codec);
 
-int ff_AMediaCodec_signalEndOfInputStream(FFAMediaCodec *codec)
+int ff_AMediaCodec_signalEndOfInputStream(FFAMediaCodec *codec);
 
 int ff_Build_SDK_INT(AVCodecContext *avctx);
 
