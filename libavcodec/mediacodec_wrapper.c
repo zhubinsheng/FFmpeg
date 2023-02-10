@@ -1374,7 +1374,6 @@ int ff_AMediaCodec_configure(FFAMediaCodec* codec, const FFAMediaFormat* format,
     (*env)->CallVoidMethod(env, codec->object, codec->jfields.configure_id, format->object, surface, NULL, flags);
     if (flags & codec->CONFIGURE_FLAG_ENCODE) {
         if (surface && !codec->jfields.set_input_surface_id) {
-            av_log(ctx, AV_LOG_ERROR, "System doesn't support setInputSurface\n");
             return AVERROR_EXTERNAL;
         }
 
@@ -1736,7 +1735,7 @@ fail:
 int mediacodec_jni_signalEndOfInputStream(FFAMediaCodec *ctx)
 {
     JNIEnv *env = NULL;
-    FFAMediaCodecJni *codec = (FFAMediaCodecJni *)ctx;
+    FFAMediaCodec *codec = (FFAMediaCodec *)ctx;
 
     JNI_GET_ENV_OR_RETURN(env, codec, AVERROR_EXTERNAL);
 
