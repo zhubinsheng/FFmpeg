@@ -237,8 +237,8 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
 
     for (int i = 0; i < FF_ARRAY_ELEMS(color_formats); i++) {
         if (avctx->pix_fmt == color_formats[i].pix_fmt) {
-            ff_AMediaFormat_setInt32(format, "color-format",
-                                     color_formats[i].color_format);
+            // ff_AMediaFormat_setInt32(format, "color-format",
+            //                          color_formats[i].color_format);
             break;
         }
     }
