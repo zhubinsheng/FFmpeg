@@ -75,8 +75,8 @@ typedef struct MediaCodecEncContext {
 } MediaCodecEncContext;
 
 enum {
-    COLOR_FormatYUV420Planar                              = 0x13,
-    COLOR_FormatYUV420SemiPlanar                          = 0x15,
+    COLOR_FormatYUV420Planar                              = 0x7f420888,
+    COLOR_FormatYUV420SemiPlanar                          = 0x7f420888,
     COLOR_FormatSurface                                   = 0x7F000789,
 };
 
