@@ -140,7 +140,7 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
     }
 
     ff_AMediaFormat_setString(format, "mime", codec_mime);
-    s->width = FFALIGN(avctx->width, 16);
+    s->width = avctx->width;
     s->height = avctx->height;
     ff_AMediaFormat_setInt32(format, "width", s->width);
     ff_AMediaFormat_setInt32(format, "height", s->height);
